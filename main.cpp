@@ -70,7 +70,7 @@ const char index_html[] PROGMEM = R"rawliteral(
 <body>
   <div id="container">
     <h2>ESP32-CAM Last Photo</h2>
-    <p>It might take more than 5 seconds to capture a photo.</p>
+    <p>The photo might be taken more than 5 seconds ago.</p>
     <p>
       <button onclick="rotatePhoto();">ROTATE</button>
       <button onclick="capturePhoto()">CAPTURE PHOTO</button>
