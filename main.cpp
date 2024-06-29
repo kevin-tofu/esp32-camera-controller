@@ -15,16 +15,11 @@
 // #include "camera_pins.h"
 
 // Replace with your network credentials
-const char* ssid = "yourid";
-const char* password = "yourpass";
+const char* ssid = "your-id";
+const char* password = "your-password";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
-
-boolean takeNewPhoto = false;
-
-// Photo File Name to save in SPIFFS
-#define FILE_PHOTO "/photo.jpg"
 
 #define CAMERA_MODEL_AI_THINKER
 #define PWDN_GPIO_NUM -1
@@ -56,7 +51,6 @@ boolean takeNewPhoto = false;
 // Pin button
 #define PIN_BTN 12
 
-
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
 <head>
@@ -73,19 +67,13 @@ const char index_html[] PROGMEM = R"rawliteral(
     <p>The photo might be taken more than 5 seconds ago.</p>
     <p>
       <button onclick="rotatePhoto();">ROTATE</button>
-      <button onclick="capturePhoto()">CAPTURE PHOTO</button>
       <button onclick="location.reload();">REFRESH PAGE</button>
     </p>
   </div>
-  <div><img src="saved-photo" id="photo" width="70%"></div>
+  <div><img src="/image" id="photo" width="70%"></div>
 </body>
 <script>
   var deg = 0;
-  function capturePhoto() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', "/capture", true);
-    xhr.send();
-  }
   function rotatePhoto() {
     var img = document.getElementById("photo");
     deg += 90;
@@ -102,48 +90,6 @@ bool checkPhoto( fs::FS &fs ) {
   File f_pic = fs.open( FILE_PHOTO );
   unsigned int pic_sz = f_pic.size();
   return ( pic_sz > 100 );
-}
-
-
-// Capture Photo and Save it to SPIFFS
-void capturePhotoSaveSpiffs( void ) {
-  camera_fb_t * fb = NULL; // pointer
-  bool ok = 0; // Boolean indicating if the picture has been taken correctly
-
-  do {
-    // Take a photo with the camera
-    Serial.println("Taking a photo...");
-
-    fb = esp_camera_fb_get();
-    if (!fb) {
-      Serial.println("Camera capture failed");
-      return;
-    }
-
-    // Photo file name
-    Serial.printf("Picture file name: %s\n", FILE_PHOTO);
-    File file = SPIFFS.open(FILE_PHOTO, FILE_WRITE);
-
-    // Insert the data in the photo file
-    if (!file) {
-      Serial.println("Failed to open file in writing mode");
-    }
-    else {
-      file.write(fb->buf, fb->len); // payload (image), payload length
-      Serial.print("The picture has been saved in ");
-      Serial.print(FILE_PHOTO);
-      Serial.print(" - Size: ");
-      Serial.print(file.size());
-      Serial.println(" bytes");
-    }
-    // Close the file
-    file.close();
-    esp_camera_fb_return(fb);
-
-    // check if file has been correctly saved in SPIFFS
-    ok = checkPhoto(SPIFFS);
-    
-  } while ( !ok );
 }
 
 
@@ -175,7 +121,7 @@ void setup() {
   }
 
   // Print ESP32 Local IP Address
-  Serial.print("IP Address: http://");
+  Serial.println("IP Address: http://");
   Serial.println(WiFi.localIP());
 
   // Turn-off the 'brownout detector'
@@ -211,30 +157,6 @@ void setup() {
   config.fb_count     = 2;
   config.fb_location = CAMERA_FB_IN_DRAM;
 
-//   if (config.pixel_format == PIXFORMAT_JPEG)
-//   {
-//     if (psramFound())
-//     {
-//       config.jpeg_quality = 5;
-//       config.fb_count = 2;
-//       config.grab_mode = CAMERA_GRAB_LATEST;
-//     }
-//     else
-//     {
-//       // Limit the frame size when PSRAM is not available
-//       config.frame_size = FRAMESIZE_SVGA;
-//       config.fb_location = CAMERA_FB_IN_DRAM;
-//     }
-//   }
-//   else
-//   {
-//     // Best option for face detection/recognition
-//     config.frame_size = FRAMESIZE_QVGA;
-// #if CONFIG_IDF_TARGET_ESP32S3
-//     config.fb_count = 2;
-// #endif
-//   }
-
   // Camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
@@ -247,13 +169,29 @@ void setup() {
     request->send_P(200, "text/html", index_html);
   });
 
-  server.on("/capture", HTTP_GET, [](AsyncWebServerRequest * request) {
-    takeNewPhoto = true;
-    request->send_P(200, "text/plain", "Taking Photo");
-  });
+  // server.on("/capture", HTTP_GET, [](AsyncWebServerRequest * request) {
+  //   takeNewPhoto = true;
+  //   request->send_P(200, "text/plain", "Taking Photo");
+  // });
 
-  server.on("/saved-photo", HTTP_GET, [](AsyncWebServerRequest * request) {
-    request->send(SPIFFS, FILE_PHOTO, "image/jpg", false);
+  // server.on("/saved-photo", HTTP_GET, [](AsyncWebServerRequest * request) {
+  //   request->send(SPIFFS, FILE_PHOTO, "image/jpg", false);
+  // });
+
+  server.on("/image", HTTP_GET, [](AsyncWebServerRequest * request) {
+    camera_fb_t* fb = esp_camera_fb_get();
+    esp_camera_fb_get();
+    if(!fb){
+      Serial.println("Camera capture failed");
+      request->send(500, "text/plain", "Failed to capture");
+      return;
+    }
+    AsyncWebServerResponse* response = request->beginResponse_P(
+      200, "image/jpeg", fb->buf, fb->len
+    );
+    response->addHeader("Content-Disposition", "inline;filename=capture.jpg");
+    request->send(response);
+    esp_camera_fb_return(fb);
   });
 
   // Start server
@@ -262,11 +200,9 @@ void setup() {
 }
 
 void loop() {
-  if (takeNewPhoto) {
-    capturePhotoSaveSpiffs();
-    takeNewPhoto = false;
-  }
+  // if (takeNewPhoto) {
+  //   capturePhotoSaveSpiffs();
+  //   takeNewPhoto = false;
+  // }
   delay(100);
 }
-
-
